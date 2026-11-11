@@ -57,6 +57,16 @@ Open **http://localhost:3000**. That's the whole setup — no database, no
 services, no keys. The port can be changed with the `PORT` environment
 variable.
 
+## Hosted version (GitHub Pages)
+
+The same app runs with no server at all: the frontend detects whether a
+`/api` backend answers, and when there isn't one it switches to static mode
+— fridge + shopping list in `localStorage`, barcode and recipe lookups
+straight from the browser to Open Food Facts and TheMealDB (both are
+CORS-open, no keys). See `public/static-store.js` for the no-server twin of
+the backend. The live site is deployed from `public/` on the `gh-pages`
+branch (GitHub Pages).
+
 Other scripts:
 
 ```bash

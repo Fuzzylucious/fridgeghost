@@ -89,12 +89,34 @@ async function apiErrorMessage(res, fallback) {
 }
 
 async function api(path, options = {}) {
+  /* Static mode (GitHub Pages): no /api backend — the same calls are served
+     from localStorage + direct upstream fetches by public/static-store.js. */
+  if (STATIC_MODE) return FridgeGhostStatic.request(path, options);
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
   });
+  if (res.status === 204) return undefined;
   if (!res.ok) throw new Error(await apiErrorMessage(res, `Request to ${path} failed (${res.status})`));
   return res.json();
+}
+
+/* Static mode is set once at boot by detectMode(). */
+let STATIC_MODE = false;
+
+/** Probe for the /api backend once at boot. Absent (GitHub Pages, or the
+    server simply isn't running) => static mode, data lives in localStorage. */
+async function detectMode() {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    const res = await fetch('/api/health', { signal: ctrl.signal });
+    clearTimeout(timer);
+    STATIC_MODE = !res.ok;
+  } catch (_) {
+    STATIC_MODE = true;
+  }
+  return STATIC_MODE;
 }
 
 function formatDate(iso) {
@@ -141,6 +163,12 @@ function setBusy(button, busy, busyText, idleText) {
 
 /* ---------- Health ---------- */
 async function checkHealth() {
+  if (STATIC_MODE) {
+    serverStatus.classList.remove('down');
+    serverStatus.classList.add('ok');
+    serverStatusText.textContent = 'Local mode · your data stays in this browser';
+    return;
+  }
   try {
     const data = await api('/api/health');
     serverStatus.classList.remove('down');
@@ -581,11 +609,17 @@ shoppingForm.addEventListener('submit', async (e) => {
 });
 
 async function toggleShoppingChecked(entry, checkbox) {
-  // NOTE: the API contract has no PATCH/PUT for shopping entries and POST
-  // does not accept a `checked` field, so a check toggle cannot be persisted
-  // server-side. Toggle locally and re-render; the state resets on reload
-  // until the backend adds an update endpoint. See final report.
-  entry.checked = checkbox.checked;
+  const checked = checkbox.checked;
+  try {
+    const updated = await api(`/api/shopping-list/${encodeURIComponent(entry.id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ checked }),
+    });
+    entry.checked = updated && typeof updated.checked === 'boolean' ? updated.checked : checked;
+  } catch (err) {
+    // Keep the toggle visible even if persistence fails.
+    entry.checked = checked;
+  }
   renderShoppingList();
 }
 
@@ -603,6 +637,7 @@ async function deleteShoppingEntry(id, name, button) {
 
 /* ---------- Boot ---------- */
 (async function init() {
+  await detectMode();
   await checkHealth();
   await Promise.all([loadFridge(), loadHauntings(), loadShoppingList()]);
 })();
