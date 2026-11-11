@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="FridgeGhost — Exorcise your fridge before your food becomes a ghost. A local-first grocery app with expiry warnings, recipes from what's expiring, and a shopping list.">
+  <title>FridgeGhost — Exorcise Your Fridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="fog fog-a" aria-hidden="true"></div>
+  <div class="fog fog-b" aria-hidden="true"></div>
+  <div class="ember-field" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="ghost-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="48" height="48" role="img" aria-label="Ghost">
+            <path d="M32 4c-11 0-20 9-20 20v28c0 2.2 3.4 2.9 4.7 1.1L20 48l4 5c1.2 1.5 3.4 1.2 4.3-.6L30 48l2 4.3c.9 1.9 3.6 1.9 4.5 0L39 48l2.7 4.4c.9 1.8 3.1 2.1 4.3.6l4-5 3.3 5.1c1.3 1.8 4.7 1.1 4.7-1.1V24C52 13 43 4 32 4z" fill="currentColor"/>
+            <circle cx="24" cy="26" r="3.4" fill="#160a24"/>
+            <circle cx="40" cy="26" r="3.4" fill="#160a24"/>
+            <ellipse cx="32" cy="37" rx="3.4" ry="4.4" fill="#160a24"/>
+          </svg>
+        </span>
+        <div>
+          <h1 class="brand-name">Fridge<span class="brand-accent">Ghost</span></h1>
+          <p class="tagline">Exorcise your fridge before your food becomes a ghost.</p>
+        </div>
+      </div>
+      <p class="header-status" id="server-status" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="server-status-text">Checking the spirits…</span>
+      </p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Global feedback: errors + toasts -->
+    <div class="alert" id="alert" role="alert" hidden></div>
+
+    <!-- ============ ADD ITEM ============ -->
+    <section class="card add-card" aria-labelledby="add-heading">
+      <h2 id="add-heading">Add to the fridge</h2>
+      <p class="section-sub">Name it, date it, and the ghost stays in its grave.</p>
+
+      <form id="add-form" novalidate>
+        <div class="form-grid">
+          <div class="field field-name">
+            <label for="item-name">Item name <span class="required" aria-hidden="true">*</span></label>
+            <input id="item-name" name="name" type="text" required autocomplete="off"
+                   placeholder="e.g. Chicken breast" maxlength="120">
+          </div>
+
+          <div class="field">
+            <label for="item-quantity">Quantity</label>
+            <input id="item-quantity" name="quantity" type="number" min="0" step="any" value="1" inputmode="decimal">
+          </div>
+
+          <div class="field">
+            <label for="item-unit">Unit</label>
+            <input id="item-unit" name="unit" type="text" autocomplete="off" placeholder="pcs, g, ml…" maxlength="24">
+          </div>
+
+          <div class="field">
+            <label for="item-expiry">Expiry date <span class="required" aria-hidden="true">*</span></label>
+            <input id="item-expiry" name="expiryDate" type="date" required>
+          </div>
+
+          <div class="field">
+            <label for="item-category">Category</label>
+            <select id="item-category" name="category">
+              <option value="">Uncategorized</option>
+              <option value="Dairy">Dairy</option>
+              <option value="Meat &amp; Poultry">Meat &amp; Poultry</option>
+              <option value="Seafood">Seafood</option>
+              <option value="Produce">Produce</option>
+              <option value="Bakery">Bakery</option>
+              <option value="Frozen">Frozen</option>
+              <option value="Pantry">Pantry</option>
+              <option value="Beverages">Beverages</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="item-brand">Brand <span class="optional">(optional)</span></label>
+            <input id="item-brand" name="brand" type="text" autocomplete="off" placeholder="Brand, if any" maxlength="120">
+          </div>
+
+          <div class="field field-barcode">
+            <label for="item-barcode">Barcode <span class="optional">(optional)</span></label>
+            <div class="barcode-row">
+              <input id="item-barcode" name="barcode" type="text" inputmode="numeric" autocomplete="off"
+                     placeholder="e.g. 3017620422003" maxlength="32" pattern="[0-9A-Za-z\- ]*">
+              <button type="button" class="btn btn-ghost" id="lookup-btn">Look up barcode</button>
+            </div>
+            <p class="field-note" id="lookup-status" role="status" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="lookup-preview" id="lookup-preview" hidden>
+          <img id="lookup-image" src="" alt="" hidden>
+          <div>
+            <p class="lookup-found">Found in the crypt — Open Food Facts</p>
+            <p class="lookup-name" id="lookup-name"></p>
+            <p class="lookup-meta" id="lookup-meta"></p>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="add-submit">Seal it in the fridge</button>
+          <p class="form-error" id="form-error" role="alert" hidden></p>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============ HAUNTINGS ============ -->
+    <section class="card hauntings-card" aria-labelledby="hauntings-heading">
+      <h2 id="hauntings-heading">👻 Hauntings</h2>
+      <p class="section-sub">What the fridge is whispering about. Most urgent first.</p>
+      <div class="hauntings-controls">
+        <label for="haunting-days">Look ahead</label>
+        <select id="haunting-days">
+          <option value="3" selected>3 days</option>
+          <option value="5">5 days</option>
+          <option value="7">7 days</option>
+          <option value="14">14 days</option>
+        </select>
+      </div>
+      <div id="hauntings-list" class="hauntings-list">
+        <p class="empty-state">No spirits stirring. The fridge rests in peace… for now.</p>
+      </div>
+    </section>
+
+    <!-- ============ FRIDGE ============ -->
+    <section class="card fridge-card" aria-labelledby="fridge-heading">
+      <div class="section-head">
+        <div>
+          <h2 id="fridge-heading">Your fridge</h2>
+          <p class="section-sub">Sorted by expiry — the soonest to haunt you, first.</p>
+        </div>
+        <p class="fridge-count" id="fridge-count" aria-live="polite"></p>
+      </div>
+      <div id="fridge-list" class="fridge-list">
+        <div class="spinner" role="status" aria-label="Loading fridge"><span></span><span></span><span></span></div>
+      </div>
+    </section>
+
+    <!-- ============ RECIPES ============ -->
+    <section class="card recipes-card" aria-labelledby="recipes-heading">
+      <h2 id="recipes-heading">Save tonight&rsquo;s dinner</h2>
+      <p class="section-sub">Cook with what&rsquo;s about to turn — before it turns on you.</p>
+      <div class="recipes-actions">
+        <button type="button" class="btn btn-primary" id="suggest-recipes-btn">Suggest recipes from what&rsquo;s expiring</button>
+        <p class="recipes-basis" id="recipes-basis" aria-live="polite"></p>
+      </div>
+      <div id="recipes-list" class="recipes-list">
+        <p class="empty-state">No recipes summoned yet. Ask the spirits of the fridge.</p>
+      </div>
+    </section>
+
+    <!-- ============ SHOPPING LIST ============ -->
+    <section class="card shopping-card" aria-labelledby="shopping-heading">
+      <h2 id="shopping-heading">Shopping list</h2>
+      <p class="section-sub">What to summon on your next trip out.</p>
+      <form id="shopping-form" class="shopping-form" novalidate>
+        <label class="visually-hidden" for="shopping-name">Item to add to the shopping list</label>
+        <input id="shopping-name" name="name" type="text" required autocomplete="off"
+               placeholder="Add an item…" maxlength="120">
+        <input id="shopping-quantity" name="quantity" type="number" min="0" step="any" placeholder="Qty" aria-label="Quantity" inputmode="decimal">
+        <input id="shopping-unit" name="unit" type="text" placeholder="Unit" aria-label="Unit" maxlength="24">
+        <button type="submit" class="btn btn-primary">Add</button>
+      </form>
+      <p class="form-error" id="shopping-error" role="alert" hidden></p>
+      <ul id="shopping-list" class="shopping-list">
+        <li class="empty-state">The list is empty. Nothing to summon.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>FridgeGhost is local-first — your groceries stay on your machine, no accounts, no tracking.</p>
+    <p>Food data via <a href="https://world.openfoodfacts.org" rel="noopener" target="_blank">Open Food Facts</a> · Recipes via <a href="https://www.themealdb.com" rel="noopener" target="_blank">TheMealDB</a> · Free APIs, no keys needed.</p>
+    <p class="footer-ghost">👻 Built for Kiroween 2026 — Frankenstein category.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

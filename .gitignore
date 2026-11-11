@@ -1,0 +1,13 @@
+# FridgeGhost — build artifacts and local data
+node_modules/
+dist/
+*.log
+.DS_Store
+# Local runtime data (fridge + shopping list are user-local JSON files)
+data/
+.env
+.env.*
+!.env.example
+
+# NOTE: .kiro/ is intentionally NOT ignored — the Kiroween submission
+# requires a /.kiro directory at the repo root (specs, hooks, steering).
