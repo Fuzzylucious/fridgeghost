@@ -48,6 +48,15 @@ let fridgeItems = [];
 let shoppingItems = [];
 let hauntings = [];
 
+/* Last summoned recipes, persisted so a reload doesn't lose them (bug 4). */
+const RECIPES_KEY = 'fridgeghost:recipes';
+let lastRecipes = null; // { basis, meals, note } | null
+
+/* Result of the most recent successful barcode lookup, if it still applies
+   to the form (bug 2). The looked-up photo is attached to the next added
+   item ONLY while this is set and its barcode still matches the form. */
+let lookupResult = null; // { barcode, name, brand, image, categories } | null
+
 /* ---------- Helpers ---------- */
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -136,22 +145,26 @@ function daysUntil(iso) {
   return Math.round((d - today) / 86400000);
 }
 
+/* Urgency bands — must match src/expiry.ts urgencyFor() and the static
+   store's urgencyFor() exactly (bug 1): expired < 0, critical 0–2,
+   stirring 3–5, resting 6+. A mismatch here is what made the same item
+   read "Expires tomorrow" in Hauntings and "2 days left" in the fridge. */
 function urgencyFromDays(days) {
   if (days === null) return 'resting';
   if (days < 0) return 'expired';
-  if (days <= 1) return 'critical';
-  if (days <= 3) return 'stirring';
+  if (days <= 2) return 'critical';
+  if (days <= 5) return 'stirring';
   return 'resting';
 }
 
+/* The label is driven by the day count alone, never by the urgency band —
+   so Hauntings and the fridge can never disagree about the same item. */
 function urgencyLabel(urgency, days) {
-  switch (urgency) {
-    case 'expired': return days === -1 ? 'Expired 1 day ago' : `Expired ${-days} days ago`;
-    case 'critical': return days === 0 ? 'Expires today' : 'Expires tomorrow';
-    case 'stirring': return `${days} days left`;
-    case 'resting': return days === null ? 'No expiry' : `${days} days left`;
-    default: return '';
-  }
+  if (days === null || days === undefined) return 'No expiry';
+  if (days < 0) return days === -1 ? 'Expired 1 day ago' : `Expired ${-days} days ago`;
+  if (days === 0) return 'Expires today';
+  if (days === 1) return 'Expires tomorrow';
+  return `${days} days left`;
 }
 
 function urgencyClass(urgency) { return `badge-${urgency}`; }
@@ -266,7 +279,7 @@ async function deleteItem(id, name, button) {
     await api(`/api/items/${encodeURIComponent(id)}`, { method: 'DELETE' });
     fridgeItems = fridgeItems.filter((i) => i.id !== id);
     renderFridge();
-    renderHauntings();
+    refreshHauntings();
   } catch (err) {
     showAlert(`Could not delete “${name}” — ${err.message}`);
     button.disabled = false;
@@ -308,19 +321,22 @@ addForm.addEventListener('submit', async (e) => {
   if (itemCategory.value) payload.category = itemCategory.value;
   if (itemBrand.value.trim()) payload.brand = itemBrand.value.trim();
   if (itemBarcode.value.trim()) payload.barcode = itemBarcode.value.trim();
-  if (lookupImage.src && !lookupPreview.hidden) payload.image = lookupImage.src;
+  /* Attach the looked-up photo ONLY if the lookup still applies to this
+     form (bug 2): same barcode as the lookup, and the lookup not cleared.
+     Never trust the preview img's leftover src — it survives form resets. */
+  if (lookupResult && lookupResult.barcode === itemBarcode.value.trim() && lookupResult.image) {
+    payload.image = lookupResult.image;
+  }
 
   setBusy(addSubmit, true, 'Sealing…', 'Seal it in the fridge');
   try {
     const created = await api('/api/items', { method: 'POST', body: JSON.stringify(payload) });
     fridgeItems.push(created);
     renderFridge();
-    renderHauntings();
+    refreshHauntings();
     addForm.reset();
     itemQuantity.value = '1';
-    lookupPreview.hidden = true;
-    lookupStatus.textContent = '';
-    lookupStatus.className = 'field-note';
+    resetLookup();
     itemName.focus();
   } catch (err) {
     formError.textContent = err.message;
@@ -331,10 +347,31 @@ addForm.addEventListener('submit', async (e) => {
 });
 
 /* ---------- Barcode lookup ---------- */
+/* A lookup fills ONLY the fields it found (name/brand/category/image) and
+   never touches the expiry date (bug 2). Its result lives in lookupResult
+   until the form is submitted, the barcode changes, or a new lookup
+   replaces it — the preview img is display-only, never state, so a photo
+   can never leak into the next item after the fields are cleared. */
+function resetLookup() {
+  lookupResult = null;
+  lookupPreview.hidden = true;
+  lookupImage.hidden = true;
+  lookupImage.removeAttribute('src');
+  lookupImage.alt = '';
+  lookupName.textContent = '';
+  lookupMeta.textContent = '';
+  lookupStatus.textContent = '';
+  lookupStatus.className = 'field-note';
+}
+
+/* The lookup stops applying the moment the barcode no longer matches it. */
+itemBarcode.addEventListener('input', () => {
+  if (lookupResult && lookupResult.barcode !== itemBarcode.value.trim()) resetLookup();
+});
+
 lookupBtn.addEventListener('click', async () => {
   const barcode = itemBarcode.value.trim();
-  lookupPreview.hidden = true;
-  lookupStatus.className = 'field-note';
+  resetLookup();
   if (!barcode) {
     lookupStatus.textContent = 'Enter a barcode first.';
     lookupStatus.classList.add('missing');
@@ -351,6 +388,13 @@ lookupBtn.addEventListener('click', async () => {
       return;
     }
     const p = data.product;
+    lookupResult = {
+      barcode,
+      name: p.name || '',
+      brand: p.brand || '',
+      image: p.image || '',
+      categories: p.categories || '',
+    };
     if (p.name) itemName.value = p.name;
     if (p.brand) itemBrand.value = p.brand;
     if (p.categories) {
@@ -376,6 +420,7 @@ lookupBtn.addEventListener('click', async () => {
     lookupStatus.classList.add('found');
     itemExpiry.focus();
   } catch (err) {
+    resetLookup();
     lookupStatus.textContent = `Lookup failed — ${err.message}`;
     lookupStatus.classList.add('missing');
   } finally {
@@ -410,21 +455,25 @@ function renderHauntings() {
   }
 }
 
-async function loadHauntings() {
-  hauntingsList.textContent = '';
-  hauntingsList.appendChild(spinner());
-  try {
-    const days = hauntingDays.value || '3';
-    const data = await api(`/api/hauntings?days=${encodeURIComponent(days)}`);
-    hauntings = Array.isArray(data) ? data : [];
-    renderHauntings();
-  } catch (err) {
-    hauntingsList.textContent = '';
-    hauntingsList.appendChild(emptyState(`Could not summon the hauntings — ${err.message}`));
-  }
+/* Hauntings are derived LOCALLY from fridgeItems on every render (bug 1):
+   the old code re-fetched /api/hauntings only at boot, so renderHauntings()
+   after an add/delete re-painted the stale list until a reload. Deriving
+   here also uses the browser's LOCAL date for daysLeft — the same single
+   computation the fridge list uses — so the two sections can never
+   disagree, whatever timezone the server runs in. */
+function refreshHauntings() {
+  const days = parseInt(hauntingDays.value || '3', 10);
+  hauntings = fridgeItems
+    .map((item) => {
+      const left = daysUntil(item.expiryDate);
+      return { item, daysLeft: left, urgency: urgencyFromDays(left) };
+    })
+    .filter((h) => h.daysLeft !== null && h.daysLeft <= days)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+  renderHauntings();
 }
 
-hauntingDays.addEventListener('change', loadHauntings);
+hauntingDays.addEventListener('change', refreshHauntings);
 
 /* ---------- Recipes ---------- */
 function expiringIngredientNames() {
@@ -509,6 +558,32 @@ async function addMissing(meal, button, body) {
   }
 }
 
+function saveRecipes(meals, note, basis) {
+  lastRecipes = { basis: basis || '', meals: Array.isArray(meals) ? meals : [], note: note || null };
+  try {
+    localStorage.setItem(RECIPES_KEY, JSON.stringify(lastRecipes));
+  } catch (_) { /* storage unavailable — recipes just won't survive a reload */ }
+}
+
+function clearRecipes() {
+  lastRecipes = null;
+  try { localStorage.removeItem(RECIPES_KEY); } catch (_) { /* ignore */ }
+}
+
+/* Restore the last summoned recipes on load (bug 4). Runs after the
+   fridge loads so ingredient "have" highlighting matches the fridge. */
+function restoreRecipes() {
+  let saved = null;
+  try {
+    const raw = localStorage.getItem(RECIPES_KEY);
+    if (raw) saved = JSON.parse(raw);
+  } catch (_) { saved = null; }
+  if (!saved || !Array.isArray(saved.meals) || saved.meals.length === 0) return;
+  lastRecipes = saved;
+  renderRecipes(saved.meals, saved.note || null);
+  if (saved.basis) recipesBasis.textContent = saved.basis;
+}
+
 suggestBtn.addEventListener('click', async () => {
   hideAlert();
   const names = expiringIngredientNames();
@@ -516,6 +591,7 @@ suggestBtn.addEventListener('click', async () => {
     recipesBasis.textContent = 'Nothing is expiring soon — add items with near expiry dates first.';
     recipesList.textContent = '';
     recipesList.appendChild(emptyState('No expiring ingredients to cook with yet.'));
+    clearRecipes();
     return;
   }
   recipesBasis.textContent = `Cooking with: ${names.join(', ')}`;
@@ -525,6 +601,7 @@ suggestBtn.addEventListener('click', async () => {
   try {
     const data = await api(`/api/recipes?ingredients=${encodeURIComponent(names.join(','))}`);
     renderRecipes(data && data.meals, data && data.note);
+    saveRecipes(data && data.meals, data && data.note, recipesBasis.textContent);
   } catch (err) {
     recipesList.textContent = '';
     recipesList.appendChild(emptyState(`The recipes would not rise — ${err.message}`));
@@ -553,8 +630,13 @@ function renderShoppingList() {
     li.appendChild(checkbox);
 
     const nameWrap = el('span', 'shop-name');
-    const qty = entry.quantity !== undefined && entry.quantity !== null && entry.quantity !== ''
-      ? ` (${entry.quantity}${entry.unit ? ` ${entry.unit}` : ''})` : '';
+    /* Quantity and unit render independently (bug 3): a recipe measure
+       like "1 1/4 cup" is stored whole as the unit with no separate
+       quantity, so it must still show — exactly once. */
+    const qtyParts = [];
+    if (entry.quantity !== undefined && entry.quantity !== null && entry.quantity !== '') qtyParts.push(entry.quantity);
+    if (entry.unit) qtyParts.push(entry.unit);
+    const qty = qtyParts.length ? ` (${qtyParts.join(' ')})` : '';
     nameWrap.appendChild(document.createTextNode(`${entry.name}${qty}`));
     if (entry.reason) nameWrap.appendChild(el('span', 'shop-reason', entry.reason));
     li.appendChild(nameWrap);
@@ -639,5 +721,7 @@ async function deleteShoppingEntry(id, name, button) {
 (async function init() {
   await detectMode();
   await checkHealth();
-  await Promise.all([loadFridge(), loadHauntings(), loadShoppingList()]);
+  await Promise.all([loadFridge(), loadShoppingList()]);
+  refreshHauntings();
+  restoreRecipes();
 })();

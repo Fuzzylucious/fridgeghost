@@ -412,10 +412,12 @@ async function handleApi(
         alreadyHave.push(ing.name);
         continue;
       }
+      // TheMealDB's measure already contains the amount ("1 1/4 cup",
+      // "3 Cups", "2") — store it whole as the unit with NO separate
+      // quantity, or the list renders the amount twice (bug 3).
       const entry: ShoppingEntry = {
         id: newId(),
         name: ing.name,
-        quantity: 1,
         unit: ing.measure || undefined,
         reason: `for ${meal.name}`,
         addedAt: new Date().toISOString(),
