@@ -44,8 +44,10 @@ to Devpost on 2026-11-12.
 
 This is genuine Kiro-agent work. The agent read the specs, steering docs, and
 existing code autonomously, then implemented the remaining unchecked tasks from
-`tasks.md`, verified each step, fixed bugs it found, and committed and pushed
-the result.
+`tasks.md`, verified each step, fixed bugs it found, and committed the result
+(fa129ae). The push to GitHub was completed separately after the session ended,
+because the Kiro monthly request-count limit was reached (see "Session end"
+note at the end of this section).
 
 ### What the agent did
 
@@ -155,3 +157,15 @@ leaving local fridge endpoints unaffected.
 - Did not re-record the demo video. The CSS fix is cosmetic (hides an
   empty box that was already non-functional before first use); the app
   behaviour shown in the video is unchanged.
+
+### Session end — monthly request-count limit reached
+
+The session ended right after the commit (fa129ae): the next model turn
+failed with HTTP 400 `ServiceQuotaExceededException`, reason
+`MONTHLY_REQUEST_COUNT` ("You've reached your monthly usage limit. Please
+return next month to continue building."). A resume attempt failed
+immediately with the same error. The push to origin and the gh-pages
+redeploy were therefore completed outside the Kiro session by the
+supervising agent. No credit figure was shown by the CLI; mid-session it
+also hit one HTTP 429 `CREDIT_CONSUMPTION_RATE_EXCEEDED` (recovered after
+a 5-minute backoff) before the monthly cap stopped it.

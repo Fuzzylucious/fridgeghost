@@ -106,7 +106,10 @@ session. The repo is structured so the agent can take over from here.
 autonomously in this session and completed the remaining unchecked items from
 `.kiro/specs/fridgeghost/tasks.md`. This is genuine Kiro-agent work: the
 agent read the specs and steering docs, implemented tasks, ran verification
-commands, fixed bugs it found, committed, and pushed.
+commands, fixed bugs it found, and committed (fa129ae). The push to origin
+and the gh-pages redeploy were completed separately after the session ended
+— the session was cut short by the Kiro monthly request-count limit (see
+"Session end" note at the end of this section).
 
 ### What the Kiro agent did
 
@@ -213,3 +216,16 @@ server and static paths).
 - Did not add any API keys, secrets, or credentials.
 - Did not re-record the demo video (the CSS change is cosmetic; the old video
   remains accurate for the app's functionality).
+
+### Session end — monthly request-count limit reached
+
+The session ended right after the commit: the next model turn failed with
+HTTP 400 `ServiceQuotaExceededException`, reason `MONTHLY_REQUEST_COUNT`
+("You've reached your monthly usage limit. Please return next month to
+continue building."). A resume attempt failed immediately with the same
+error, so the Kiro session could not continue. The push to origin and the
+gh-pages redeploy were therefore completed outside the Kiro session by the
+supervising agent. No credit figure was shown by the CLI during the session;
+mid-session it also hit one HTTP 429 `CREDIT_CONSUMPTION_RATE_EXCEEDED`
+(throttled, recovered after a 5-minute backoff) before the monthly cap
+stopped it for good.
