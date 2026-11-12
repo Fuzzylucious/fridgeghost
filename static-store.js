@@ -215,7 +215,7 @@
       MEALDB_BASE + '/lookup.php?i=' + encodeURIComponent(id),
       'TheMealDB',
     );
-    if (!data.meals || data.meals.length === 0) return null;
+    if (!Array.isArray(data.meals) || data.meals.length === 0) return null;
     return parseMealDetail(data.meals[0]);
   }
 
@@ -381,6 +381,20 @@
       shopDelList.splice(shopDelIdx, 1);
       saveShopping(shopDelList);
       return noContent();
+    }
+
+    /* Recipe detail by id */
+    var recipeDetail = /^\/api\/recipes\/([^/]+)$/.exec(pathname);
+    if (method === 'GET' && recipeDetail) {
+      var recipeId = decodeURIComponent(recipeDetail[1]);
+      var recipeDetailMeal;
+      try {
+        recipeDetailMeal = await getMealById(recipeId);
+      } catch (e) {
+        return err(502, e instanceof Error ? e.message : 'TheMealDB unreachable');
+      }
+      if (!recipeDetailMeal) return err(404, 'Meal not found');
+      return ok(recipeDetailMeal);
     }
 
     /* Add missing recipe ingredients to the shopping list */
