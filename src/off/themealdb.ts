@@ -7,23 +7,10 @@
 // Network/upstream failures throw so the caller can answer 502; a query
 // with no matches resolves to an empty list / null, not an error.
 
-export interface MealSummary {
-  id: string;
-  name: string;
-  thumb: string;
-}
+import type { MealSummary, MealIngredient, MealDetail } from "../types";
 
-export interface MealIngredient {
-  name: string;
-  measure: string;
-}
-
-export interface MealDetail extends MealSummary {
-  category: string;
-  area: string;
-  instructions: string;
-  ingredients: MealIngredient[];
-}
+// Re-export so callers that imported these types from themealdb.ts keep working.
+export type { MealSummary, MealIngredient, MealDetail } from "../types";
 
 const BASE = "https://www.themealdb.com/api/json/v1/1";
 
@@ -82,7 +69,7 @@ export async function getMealById(id: string): Promise<MealDetail | null> {
   const data = (await fetchJson(
     `${BASE}/lookup.php?i=${encodeURIComponent(id)}`,
   )) as LookupResponse;
-  if (!data.meals || data.meals.length === 0) return null;
+  if (!Array.isArray(data.meals) || data.meals.length === 0) return null;
   return parseMealDetail(data.meals[0]);
 }
 

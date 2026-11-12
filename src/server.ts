@@ -307,6 +307,29 @@ async function handleApi(
     return;
   }
 
+  // ---- Recipe detail by id ------------------------------------------------
+  const recipeDetail = /^\/api\/recipes\/([^/]+)$/.exec(pathname);
+  if (method === "GET" && recipeDetail) {
+    const mealId = decodeURIComponent(recipeDetail[1]);
+    let meal: MealDetail | null;
+    try {
+      meal = await getMealById(mealId);
+    } catch (err) {
+      sendError(
+        res,
+        502,
+        err instanceof Error ? err.message : "TheMealDB unreachable",
+      );
+      return;
+    }
+    if (!meal) {
+      sendError(res, 404, "Meal not found");
+      return;
+    }
+    sendJson(res, 200, meal);
+    return;
+  }
+
   // ---- Shopping list ------------------------------------------------------
   if (method === "GET" && pathname === "/api/shopping-list") {
     sendJson(res, 200, loadShoppingList());

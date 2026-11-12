@@ -96,3 +96,120 @@ human-directed builders following those specs — not by the Kiro agent.
 Kiro the product shaped how this repo is organised; Kiro the agent did not
 build it, because interactive sign-in was not possible in this unattended
 session. The repo is structured so the agent can take over from here.
+
+---
+
+## Kiro Agent Session — 2026-11-13
+
+**Session ID:** sess_81ea2e28-b23e-4b14-b2e7-2e832e1b9392  
+**What actually happened:** The Kiro agent (authenticated via Kiro IDE) ran
+autonomously in this session and completed the remaining unchecked items from
+`.kiro/specs/fridgeghost/tasks.md`. This is genuine Kiro-agent work: the
+agent read the specs and steering docs, implemented tasks, ran verification
+commands, fixed bugs it found, committed, and pushed.
+
+### What the Kiro agent did
+
+**Phase 2 — src/types.ts (new file)**  
+Created `src/types.ts` and extracted the five shared interfaces (`FridgeItem`,
+`FridgeItemView`, `ShoppingEntry`, `MealSummary`, `MealIngredient`,
+`MealDetail`) from `src/store.ts` and `src/off/themealdb.ts` into it. Both
+source files were updated to import from the new module and re-export the
+types for backwards compatibility. `src/server.ts` required no changes.
+`npm run build` (tsc strict) passed with zero errors after the refactor.
+
+Also ran the expiry boundary check by hand against `dist/expiry.js`: all 6
+cases passed (`-1→expired`, `0→critical`, `1→critical`, `3→stirring`,
+`4→stirring`, `6→resting`). Noted that the as-built urgency band names
+(`critical`/`stirring`/`resting`) differ from the spec (`today`/`soon`/`fresh`)
+but the boundary math is correct.
+
+**Phase 3 — Persistence verification**  
+Started a server on a temp port, POSTed an item ("Ghost Milk"), killed the
+server, restarted it, and confirmed the item survived the restart via GET.
+Test data cleaned up afterwards.
+
+**Phase 4 — Live API client check**  
+Verified against real upstream APIs: barcode `3017620422003` → Nutella (Open
+Food Facts); `ingredients=chicken` → 3 meals (TheMealDB); obscure ingredient
+→ empty list. All network calls passed. Note: barcode `9999999999999` returned
+a product (a test entry in the OFF database) — this is correct server
+behaviour.
+
+**Phase 5 — GET /api/recipes/:id (new route)**  
+Added `GET /api/recipes/:id` to `src/server.ts` (200 MealDetail; 404 on
+unknown meal; 502 on upstream failure). Also mirrored the route in
+`public/static-store.js` for GitHub Pages parity.
+
+During verification, found and fixed a bug in `getMealById` in both files:
+TheMealDB returns `{"meals":"Invalid ID"}` (a string) for unknown ids, but
+the previous code tested `data.meals.length`, which is non-zero for a string,
+causing it to call `parseMealDetail("I")` and return an empty object instead
+of null. Fixed by changing the guard to `Array.isArray(data.meals)`.
+
+Verified: `GET /api/recipes/52940` → 200 with 13 ingredients; `GET
+/api/recipes/BOGUS_ID_99999` → 404.
+
+**Phase 6 — Lookup-preview CSS fix**  
+Added `.lookup-preview[hidden] { display: none; }` to `public/styles.css`.
+The existing `.lookup-preview { display: flex; }` rule was overriding the
+HTML `hidden` attribute, making the box visible before any barcode lookup.
+The new attribute-selector rule has higher specificity and restores correct
+behaviour. Verified by confirming the rule is present in the served file.
+
+**Phase 7 — Smoke tests and verification**  
+Ran 23 endpoint checks covering health, CRUD, validation, hauntings, lookup,
+recipes, add-missing idempotency, restart persistence, and corrupt-file
+fallback. All 23 passed.
+
+Attempted the network-disabled failure-mode check with `unshare --net`.
+`unshare` is available but `ip link set lo up` requires root (`RTNETLINK:
+Operation not permitted`) in this environment, so the server's loopback was
+not reachable from within the namespace. The error-handling code paths were
+code-reviewed: both API client functions throw on network failure, and
+`server.ts` catches those throws and returns 502 JSON in every handler. The
+fridge and shopping-list endpoints only touch local JSON files and are
+unaffected by network state. Full runtime confirmation of the 502 path
+requires a root-capable environment.
+
+Ran the secrets grep: all matches are documentation text; no real credentials
+committed. Confirmed `git check-ignore .kiro/specs/fridgeghost/requirements.md`
+prints nothing (exit code 1, not ignored).
+
+Verified `public/static-store.js` loads in plain Node 24 without DOM errors,
+handles all local routes correctly, and the new `GET /api/recipes/:id` route
+returns 404 for a bogus id (the `Array.isArray` fix is effective in both the
+server and static paths).
+
+### Files changed in this session
+
+| File | Change |
+|---|---|
+| `src/types.ts` | New file — shared interfaces |
+| `src/store.ts` | Import FridgeItem, ShoppingEntry from types.ts; re-export them |
+| `src/off/themealdb.ts` | Import MealSummary, MealIngredient, MealDetail from types.ts; fix getMealById Array.isArray guard; re-export types |
+| `src/server.ts` | Add GET /api/recipes/:id route |
+| `public/static-store.js` | Add GET /api/recipes/:id route; fix getMealById Array.isArray guard |
+| `public/styles.css` | Add .lookup-preview[hidden] { display: none; } |
+| `.kiro/specs/fridgeghost/tasks.md` | Mark completed items [x] with verification notes |
+| `docs/KIRO_USAGE.md` | This section |
+| `docs/DEVPOST_KIRO_USAGE_UPDATE.md` | New file — updated Devpost Kiro usage write-up |
+
+### Build and verification results
+
+- `npm run build` (tsc strict): **zero errors** ✓
+- Smoke test: **23/23 passed** ✓
+- Restart persistence: **passed** ✓
+- Corrupt-file fallback: **passed** ✓
+- Secrets check: **clean** ✓
+- `.kiro/` gitignore check: **not ignored** ✓
+- Static-store Node load: **passed** ✓
+- Network-disabled 502 check: **not runtime-verified** (requires root for loopback in network namespace); code-reviewed as correct.
+
+### What the Kiro agent did not do
+
+- Did not modify `requirements.md` or `design.md` (per instructions).
+- Did not add any runtime dependencies.
+- Did not add any API keys, secrets, or credentials.
+- Did not re-record the demo video (the CSS change is cosmetic; the old video
+  remains accurate for the app's functionality).

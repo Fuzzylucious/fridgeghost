@@ -6,29 +6,10 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { FridgeItem, ShoppingEntry } from "./types";
 
-export interface FridgeItem {
-  id: string;
-  name: string;
-  brand?: string;
-  category?: string;
-  quantity: number;
-  unit?: string;
-  expiryDate: string; // YYYY-MM-DD
-  barcode?: string;
-  image?: string;
-  addedAt: string; // ISO timestamp
-}
-
-export interface ShoppingEntry {
-  id: string;
-  name: string;
-  quantity?: number;
-  unit?: string;
-  reason?: string;
-  addedAt: string; // ISO timestamp
-  checked: boolean;
-}
+// Re-export so callers that imported these types from store.ts keep working.
+export type { FridgeItem, ShoppingEntry } from "./types";
 
 // __dirname is dist/ when compiled (src/ when run under ts-node); either way
 // the data dir is one level up from the code dir, i.e. the repo root.

@@ -264,6 +264,8 @@ input[type="date"] { color-scheme: dark; }
   border-radius: var(--radius-sm);
   background: rgba(139, 92, 246, 0.10);
 }
+/* Keep the HTML `hidden` attribute effective even when display:flex is set. */
+.lookup-preview[hidden] { display: none; }
 .lookup-preview img {
   width: 56px; height: 56px; object-fit: contain;
   border-radius: var(--radius-sm); background: #fff;
